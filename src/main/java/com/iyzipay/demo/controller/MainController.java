@@ -8,41 +8,29 @@ import com.iyzipay.demo.exception.SeatNotAvailableException;
 import com.iyzipay.demo.model.PaymentRequest;
 import com.iyzipay.demo.model.SelectSeatRequest;
 import com.iyzipay.demo.service.IyzipayPaymentService;
-import com.iyzipay.demo.service.SeatService;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 
 @RestController
 @RequestMapping("/api/v1/main")
 public class MainController {
 
     private IyzipayPaymentService iyzipayPaymentService;
-    private SeatService seatService;
     private KafkaTemplate<String, String> kafkaTemplate;
     private KafkaListeners kafkaListeners;
 
-
-
     private ObjectMapper mapper = new ObjectMapper();
 
-
-    public MainController(IyzipayPaymentService iyzipayPaymentService, SeatService seatService, KafkaTemplate<String, String> kafkaTemplate, KafkaListeners kafkaListeners) {
+    public MainController(IyzipayPaymentService iyzipayPaymentService, KafkaTemplate<String, String> kafkaTemplate, KafkaListeners kafkaListeners) {
         this.iyzipayPaymentService = iyzipayPaymentService;
-        this.seatService = seatService;
         this.kafkaTemplate = kafkaTemplate;
         this.kafkaListeners = kafkaListeners;
-
     }
 
     @PostMapping(value = "/ss", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> selectSeat(@RequestBody SelectSeatRequest selectSeat) throws InterruptedException, JsonProcessingException, ExecutionException {
-        CountDownLatch latch = new CountDownLatch(1);
-
+    public ResponseEntity<?> selectSeat(@RequestBody SelectSeatRequest selectSeat) throws JsonProcessingException {
         kafkaTemplate.send("seat-topic", mapper.writeValueAsString(selectSeat));
 
         if (kafkaListeners.isExceptionOccurred()) {

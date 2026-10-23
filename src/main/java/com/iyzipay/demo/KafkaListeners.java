@@ -1,10 +1,8 @@
 package com.iyzipay.demo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.iyzipay.demo.entity.Payment;
 import com.iyzipay.demo.exception.SeatNotAvailableException;
 import com.iyzipay.demo.model.SelectSeatRequest;
-import com.iyzipay.demo.repository.PaymentRepository;
 import com.iyzipay.demo.service.SeatService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,11 +18,9 @@ public class KafkaListeners {
     private boolean exceptionOccurred = false;
     private String exceptionMessage;
     private SeatService seatService;
-    private PaymentRepository paymentRepository;
 
-    public KafkaListeners(SeatService seatService, PaymentRepository paymentRepository) {
+    public KafkaListeners(SeatService seatService) {
         this.seatService = seatService;
-        this.paymentRepository = paymentRepository;
     }
 
     @RetryableTopic(

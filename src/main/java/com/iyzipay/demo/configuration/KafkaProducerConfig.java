@@ -14,7 +14,6 @@ import java.util.Map;
 @Configuration
 public class KafkaProducerConfig {
 
-//    @Value("${spring.kafka.bootstrap-servers}")
     private String boostrapServers ="localhost:9092";
 
     public Map<String, Object> producerConfig(){

@@ -7,7 +7,7 @@
 
     <logger name="org.springframework" level="INFO"/>
     <logger name="org.hibernate" level="INFO"/>
-    <logger name="com.iyzipay.demo" level="INFO"/> <!-- debuga çevir bu ve alt satırı -->
+    <logger name="com.iyzipay.demo" level="INFO"/>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
