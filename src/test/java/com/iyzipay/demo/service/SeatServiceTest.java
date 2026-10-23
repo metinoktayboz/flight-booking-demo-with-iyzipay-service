@@ -153,29 +153,49 @@ public class SeatServiceTest { //SeatService tests with mock data. Each test sho
         seatService.selectSeat(selectedSeatId, buyerId);
     }
 
-    @Test(expected = java.lang.NullPointerException.class) //because of the return of save method
+    @Test
     public void testUnSelectSeats() {
         // Prepare test data
         Long seatId1 = 1L;
         Long seatId2 = 2L;
         List<Long> selectedSeatIds = Arrays.asList(seatId1, seatId2);
+        Flight flight = new Flight();
+        flight.setId(1L);
 
         SeatDTO seat1 = new SeatDTO();
         seat1.setId(seatId1);
         seat1.setAvailability(false);
         seat1.setPassengerId("passenger1");
+        seat1.setFlight_id(flight.getId());
+        Seat seatEntity1 = new Seat();
+        seatEntity1.setFlight(flight);
 
         SeatDTO seat2 = new SeatDTO();
         seat2.setId(seatId2);
         seat2.setAvailability(false);
         seat2.setPassengerId("passenger2");
+        seat2.setFlight_id(flight.getId());
+        Seat seatEntity2 = new Seat();
+        seatEntity2.setFlight(flight);
+
+        // Set up mock behavior
+        Mockito.when(seatRepository.findById(seatId1)).thenReturn(Optional.of(seatEntity1));
+        Mockito.when(seatRepository.findById(seatId2)).thenReturn(Optional.of(seatEntity2));
+        Mockito.when(seatEntityToDto.convert(seatEntity1)).thenReturn(seat1);
+        Mockito.when(seatEntityToDto.convert(seatEntity2)).thenReturn(seat2);
+        Mockito.when(seatDtoToEntity.convert(seat1)).thenReturn(seatEntity1);
+        Mockito.when(seatDtoToEntity.convert(seat2)).thenReturn(seatEntity2);
+        Mockito.when(seatRepository.save(seatEntity1)).thenReturn(seatEntity1);
+        Mockito.when(seatRepository.save(seatEntity2)).thenReturn(seatEntity2);
 
         // Call the method to test
         seatService.unSelectSeats(selectedSeatIds);
 
         // Verify the behavior
-        Mockito.verify(seatService).findById(seatId1);
-        Mockito.verify(seatService).findById(seatId2);
+        Mockito.verify(seatRepository).findById(seatId1);
+        Mockito.verify(seatRepository).findById(seatId2);
+        Mockito.verify(seatRepository).save(seatEntity1);
+        Mockito.verify(seatRepository).save(seatEntity2);
 
         Assert.assertTrue(seat1.isAvailability());
         Assert.assertNull(seat1.getPassengerId());
