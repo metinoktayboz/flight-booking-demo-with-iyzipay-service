@@ -75,6 +75,14 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
         return seatIds;
     }
 
+    private void assertSeats(List<Long> seatIds, boolean availability, String passengerId) {
+        for (Long seatId : seatIds) {
+            SeatDTO seat = seatService.findById(seatId);
+            Assert.assertEquals(availability, seat.isAvailability());
+            Assert.assertEquals(passengerId, seat.getPassengerId());
+        }
+    }
+
     //the listener's consumer uses the default auto-offset-reset (latest), so messages sent before it has its partition would be skipped
     private void waitForSeatTopicAssignment() throws Exception {
         for (MessageListenerContainer container : kafkaListenerEndpointRegistry.getListenerContainers()) {
@@ -148,9 +156,12 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
 
 
         paymentService.makePayment(paymentRequest);
+
+        //a successful payment keeps the seats for the buyer
+        assertSeats(s, false, "moboz7");
     }
 
-    @Test(expected = SeatNotAvailableException.class)
+    @Test
     public void makePayment_SeatNotAvailable_ThrowsSeatNotAvailableException(){
         List<Long> s = createSeats(2);
         s.forEach(seatId -> seatService.selectSeat(seatId,"moboz7"));
@@ -168,10 +179,16 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
         paymentRequest.setSeat_ids(s);
 
 
-        paymentService.makePayment(paymentRequest);
+        try {
+            paymentService.makePayment(paymentRequest);
+            Assert.fail("Expected SeatNotAvailableException");
+        } catch (SeatNotAvailableException e) {
+            //the seats stay with the buyer who selected them
+            assertSeats(s, false, "moboz7");
+        }
     }
 
-    @Test(expected = PaymentNotAcceptedException.class)
+    @Test
     public void makePayment_PaymentFailure_ThrowsPaymentNotAcceptedException(){
         List<Long> s = createSeats(2);
         s.forEach(seatId -> seatService.selectSeat(seatId,"moboz7"));
@@ -191,7 +208,13 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
         paymentRequest.setSeat_ids(s);
 
 
-        paymentService.makePayment(paymentRequest);
+        try {
+            paymentService.makePayment(paymentRequest);
+            Assert.fail("Expected PaymentNotAcceptedException");
+        } catch (PaymentNotAcceptedException e) {
+            //a failed payment releases the seats again
+            assertSeats(s, true, null);
+        }
     }
 
 }
