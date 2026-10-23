@@ -14,19 +14,19 @@ Built as a take-home case study (2024).
 
 ## Architecture
 
-Seat selection requests are not written to the database directly by the controller. Instead, the controller publishes each request to the `seat-topic` Kafka topic, which has a single partition. A single consumer (`KafkaListeners`) reads the messages in order and performs the availability check and the update. As a result, simultaneous requests for the same seat are processed one after another, so only the first one succeeds and the others are rejected as "seat not available".
+Seat selection requests are not written to the database directly by the controller. Instead, the controller publishes each request to the `seat-topic` Kafka topic, which has a single partition. A single consumer (`KafkaListeners`, with `spring.kafka.listener.concurrency: 1`) reads the messages in order and performs the availability check and the update. As a result, simultaneous requests for the same seat are processed one after another, so only the first one succeeds and the others are rejected as "seat not available".
 
 Code layout: `controller` (REST endpoints), `service` (business logic and the iyzipay integration), `repository` (Spring Data JPA), `entity` / `dto` / `converter` (persistence model and manual mapping), `exception` (custom exceptions and the global handler).
 
 ## Tech stack
 
-- Java 11 (the POM keeps Spring Boot's default bytecode target, 1.8; builds and runs on JDK 21)
+- Java 11
 - Spring Boot 2.7.3: Spring Web, Spring Data JPA (Hibernate 5.6.10)
 - Spring Kafka 2.8.8 with kafka-clients 3.1.1
 - Apache Kafka 4.3.1 (official `apache/kafka` image, KRaft mode) via Docker Compose
 - H2 2.1.214 (file-based database)
 - iyzipay-java 2.0.119
-- JUnit 4.12, Mockito 4.5.1
+- JUnit 4.12 (run on the JUnit Platform through the JUnit Vintage engine), Mockito 4.5.1
 - Maven 3.9.9 (via the Maven wrapper)
 
 > **Note:** Spring Boot 2.7 and Java 11 are no longer current (Spring Boot 2.7 is past the end of its open-source support). The project intentionally stays on the versions it was written with.
@@ -128,21 +128,22 @@ curl -X POST http://localhost:8080/api/v1/main/mp \
 
 ## Tests
 
-- `FlightServiceTest` and `SeatServiceTest`: unit tests for the service layer, with mocked repositories and converters (Mockito).
-- `IyzipayPaymentServiceTest`: integration tests that start the full Spring context. They cover two concurrent selection requests for the same seat sent through Kafka, a payment against the iyzipay sandbox, a payment for a seat held by another buyer, and a payment rejected because of a missing buyer field.
+- `FlightServiceTest` (7 tests) and `SeatServiceTest` (8 tests): unit tests for the service layer, with mocked repositories and converters (Mockito). They cover saving, lookup, deletion, available seat counting, seat selection and releasing seats.
+- `IyzipayPaymentServiceTest` (4 tests): integration tests that start the full Spring context. They cover two concurrent selection requests for the same seat sent through Kafka, a successful payment against the iyzipay sandbox, a payment for a seat held by another buyer, and a payment that iyzipay rejects because a required buyer field is missing. Each test creates its own flight and seats.
 
-The integration tests need Kafka on `localhost:9092` and the iyzipay environment variables described above:
+Run them with Kafka running and the iyzipay environment variables set as described above:
 
 ```bash
 docker compose up -d
 ./mvnw test
 ```
 
-The tests are written with JUnit 4. Spring Boot 2.7 runs tests on the JUnit 5 platform and does not include the JUnit Vintage engine, so `./mvnw test` currently finishes without executing them. To run them, add `org.junit.vintage:junit-vintage-engine` as a test dependency. With the engine added, 16 of the 19 tests pass. Two payment tests fail because they depend on seat data and execution order (they use seat ids that other tests either did not create or already booked). `SeatServiceTest.testUnSelectSeats` fails because it expects a `NullPointerException`, but the mocks it sets up lead to a `ResourceNotFoundException` instead.
+Result: 19 tests, all passing. The integration tests need Kafka and the iyzipay variables, and the payment tests call the iyzipay sandbox over the network.
 
 ## Known limitations
 
 - Seat selection is serialized through a single Kafka consumer. There is no database-level locking (no optimistic locking and no unique constraint), so correctness depends on running exactly one consumer instance.
 - The booking result is not returned to the HTTP caller synchronously. The listener stores the outcome in shared state, which the controller reads right after publishing the message, so a response can reflect the outcome of an earlier request.
 - The concurrency test relies on `Thread.sleep`, which makes it timing-dependent.
+- Endpoint paths are abbreviated and not resource-oriented (for example `/api/v1/flight/af`, and `POST` for updates). A production API would use resource paths with `PUT`/`PATCH`.
 - A production version would use optimistic locking (`@Version`), return the booking result synchronously, and use a deterministic concurrency test (for example, with a `CountDownLatch`).
