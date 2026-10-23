@@ -129,7 +129,9 @@ curl -X POST http://localhost:8080/api/v1/main/mp \
 ## Tests
 
 - `FlightServiceTest` (7 tests) and `SeatServiceTest` (8 tests): unit tests for the service layer, with mocked repositories and converters (Mockito). They cover saving, lookup, deletion, available seat counting, seat selection and releasing seats.
-- `IyzipayPaymentServiceTest` (4 tests): integration tests that start the full Spring context. They cover two concurrent selection requests for the same seat sent through Kafka, a successful payment against the iyzipay sandbox, a payment for a seat held by another buyer, and a payment that iyzipay rejects because a required buyer field is missing. Each test creates its own flight and seats.
+- `IyzipayPaymentServiceTest` (4 tests): integration tests that start the full Spring context. Each test creates its own flight and seats.
+  - Concurrent selection: two buyers request the same seat through Kafka. The test waits for the listener to process both messages (a `CountDownLatch` with a timeout) and checks that the seat is taken by one of them and the other got a `SeatNotAvailableException`. `SeatService` is a `@SpyBean`, which records the outcome of each request.
+  - Payments against the iyzipay sandbox: a successful payment keeps the seats for the buyer, a payment by a buyer who does not hold the seats is rejected and leaves them as they were, and a payment that iyzipay rejects (a required buyer field is missing) releases the seats again.
 
 Run them with Kafka running and the iyzipay environment variables set as described above:
 
@@ -144,6 +146,5 @@ Result: 19 tests, all passing. The integration tests need Kafka and the iyzipay 
 
 - Seat selection is serialized through a single Kafka consumer. There is no database-level locking (no optimistic locking and no unique constraint), so correctness depends on running exactly one consumer instance.
 - The booking result is not returned to the HTTP caller synchronously. The listener stores the outcome in shared state, which the controller reads right after publishing the message, so a response can reflect the outcome of an earlier request.
-- The concurrency test relies on `Thread.sleep`, which makes it timing-dependent.
 - Endpoint paths are abbreviated and not resource-oriented (for example `/api/v1/flight/af`, and `POST` for updates). A production API would use resource paths with `PUT`/`PATCH`.
-- A production version would use optimistic locking (`@Version`), return the booking result synchronously, and use a deterministic concurrency test (for example, with a `CountDownLatch`).
+- A production version would use optimistic locking (`@Version`) and return the booking result synchronously.
