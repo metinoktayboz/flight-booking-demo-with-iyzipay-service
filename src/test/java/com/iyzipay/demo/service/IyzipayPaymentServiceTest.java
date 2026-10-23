@@ -1,8 +1,6 @@
 package com.iyzipay.demo.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.iyzipay.demo.KafkaListeners;
 import com.iyzipay.demo.dto.FlightDTO;
 import com.iyzipay.demo.dto.SeatDTO;
 import com.iyzipay.demo.exception.PaymentNotAcceptedException;
@@ -13,17 +11,30 @@ import com.iyzipay.demo.model.sample.SampleAdress;
 import com.iyzipay.demo.model.sample.SampleBuyer;
 import com.iyzipay.demo.model.sample.SamplePaymentCard;
 import com.iyzipay.model.Buyer;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.MessageListenerContainer;
+import org.springframework.kafka.test.utils.ContainerTestUtils;
 import org.springframework.test.context.junit4.SpringRunner;
+import org.springframework.test.util.AopTestUtils;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 @EnableAutoConfiguration
 @RunWith(SpringRunner.class)
@@ -34,12 +45,13 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
     private KafkaTemplate<String, String> kafkaTemplate;
 
     @Autowired
-    private KafkaListeners kafkaListeners;
+    private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;
 
     @Autowired
     private IyzipayPaymentService paymentService;
 
-    @Autowired
+    //spy on the real service, so the concurrency test can see the outcome of every selection made by the listener
+    @SpyBean
     private SeatService seatService;
 
     @Autowired
@@ -63,48 +75,57 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
         return seatIds;
     }
 
-    @Test
-    public void purchaseSeat_ConcurrentRequests() throws InterruptedException {
-        ObjectMapper mapper = new ObjectMapper();
+    //the listener's consumer uses the default auto-offset-reset (latest), so messages sent before it has its partition would be skipped
+    private void waitForSeatTopicAssignment() throws Exception {
+        for (MessageListenerContainer container : kafkaListenerEndpointRegistry.getListenerContainers()) {
+            String[] topics = container.getContainerProperties().getTopics();
+            if (topics != null && Arrays.asList(topics).contains("seat-topic")) {
+                ContainerTestUtils.waitForAssignment(container, 1);
+            }
+        }
+    }
 
+    @Test
+    public void purchaseSeat_ConcurrentRequests() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
         Long seatId = createSeats(1).get(0);
 
-
-        // Create and start the first thread
-        Thread thread1 = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    kafkaTemplate.send("seat-topic",mapper.writeValueAsString(new SelectSeatRequest(seatId,"buyer1")));
-                    Thread.sleep(5000);
-                    if (kafkaListeners.isExceptionOccurred()){
-                        throw new SeatNotAvailableException(kafkaListeners.getExceptionMessage());
-                    }
-                } catch (JsonProcessingException | InterruptedException e) {
-                    e.printStackTrace();
-                }
+        //record what happened to each buyer's request: null if the seat was booked, otherwise the exception
+        Map<String, RuntimeException> outcomes = Collections.synchronizedMap(new HashMap<>());
+        CountDownLatch processed = new CountDownLatch(2);
+        SeatService seatServiceSpy = AopTestUtils.getUltimateTargetObject(seatService);
+        Mockito.doAnswer(invocation -> {
+            String buyerId = invocation.getArgument(1);
+            try {
+                Object result = invocation.callRealMethod();
+                outcomes.put(buyerId, null);
+                return result;
+            } catch (RuntimeException e) {
+                outcomes.put(buyerId, e);
+                throw e;
+            } finally {
+                processed.countDown();
             }
-        });
-        thread1.start();
+        }).when(seatServiceSpy).selectSeat(Mockito.eq(seatId), Mockito.anyString());
 
-        // Create and start the second thread
-        Thread thread2 = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    kafkaTemplate.send("seat-topic",mapper.writeValueAsString(new SelectSeatRequest(seatId,"buyer2")));
-                    Thread.sleep(5000);
-                    if (kafkaListeners.isExceptionOccurred()){
-                        throw new SeatNotAvailableException(kafkaListeners.getExceptionMessage());
-                    }
-                } catch (JsonProcessingException | InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-        thread2.start();
+        waitForSeatTopicAssignment();
 
-        Thread.sleep(5000);
+        //both requests are published before either is processed, as two simultaneous HTTP requests would be
+        kafkaTemplate.send("seat-topic", mapper.writeValueAsString(new SelectSeatRequest(seatId, "buyer1"))).get(10, TimeUnit.SECONDS);
+        kafkaTemplate.send("seat-topic", mapper.writeValueAsString(new SelectSeatRequest(seatId, "buyer2"))).get(10, TimeUnit.SECONDS);
+
+        Assert.assertTrue("both selection requests should be processed", processed.await(30, TimeUnit.SECONDS));
+
+        SeatDTO seat = seatService.findById(seatId);
+        Assert.assertFalse(seat.isAvailability());
+        Assert.assertTrue(Arrays.asList("buyer1", "buyer2").contains(seat.getPassengerId()));
+        String otherBuyer = seat.getPassengerId().equals("buyer1") ? "buyer2" : "buyer1";
+
+        Assert.assertEquals(2, outcomes.size());
+        Assert.assertNull(outcomes.get(seat.getPassengerId()));
+        Assert.assertNotNull(outcomes.get(otherBuyer));
+        Assert.assertEquals(SeatNotAvailableException.class, outcomes.get(otherBuyer).getClass());
+        Assert.assertEquals("Seat: " + seatId + " is booked by someone else!", outcomes.get(otherBuyer).getMessage());
     }
 
 
