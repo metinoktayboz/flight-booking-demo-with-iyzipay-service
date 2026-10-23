@@ -22,3 +22,7 @@ spring:
       settings:
         trace: false
         web-allow-others: false
+iyzipay:
+  api-key: ${IYZIPAY_API_KEY}
+  secret-key: ${IYZIPAY_SECRET_KEY}
+  base-url: ${IYZIPAY_BASE_URL:https://sandbox-api.iyzipay.com}

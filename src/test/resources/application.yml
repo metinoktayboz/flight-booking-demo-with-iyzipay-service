@@ -10,3 +10,7 @@ spring:
     hibernate:
       ddl-auto: create-drop
       use-new-id-generator-mappings: false
+iyzipay:
+  api-key: ${IYZIPAY_API_KEY}
+  secret-key: ${IYZIPAY_SECRET_KEY}
+  base-url: ${IYZIPAY_BASE_URL:https://sandbox-api.iyzipay.com}

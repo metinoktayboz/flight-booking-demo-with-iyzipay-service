@@ -10,6 +10,7 @@ import com.iyzipay.model.*;
 import com.iyzipay.request.CreatePaymentRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -21,11 +22,14 @@ import java.util.List;
 public class IyzipayPaymentService {
     private Logger logger = LoggerFactory.getLogger(IyzipayPaymentService.class);
 
-    private final String apiKey = "sandbox-bu2xXaGH29vvvYCFnvcoSpbM5qfvcaDk";
+    @Value("${iyzipay.api-key}")
+    private String apiKey;
 
-    private final String secretKey = "sandbox-YoDHHR922RLhU0wBa7RM1S9esIthuV3i";
+    @Value("${iyzipay.secret-key}")
+    private String secretKey;
 
-    private final String baseUrl = "https://sandbox-api.iyzipay.com";
+    @Value("${iyzipay.base-url}")
+    private String baseUrl;
 
     private FlightService flightService;
     private SeatService seatService;
