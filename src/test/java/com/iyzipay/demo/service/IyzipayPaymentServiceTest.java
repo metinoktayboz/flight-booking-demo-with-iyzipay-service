@@ -45,23 +45,29 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
     @Autowired
     private FlightService flightService;
 
+    //creates a flight with the given number of seats and returns the seat ids, so each test uses its own data
+    private List<Long> createSeats(int count) {
+        FlightDTO flight = new FlightDTO();
+        flight.setName("Test Flight");
+        flight.setDescription("Test");
+        flight.setPrice(new BigDecimal("100"));
+        flight = flightService.save(flight);
+
+        List<Long> seatIds = new ArrayList<>();
+        for (int i = 1; i <= count; i++) {
+            SeatDTO seat = new SeatDTO();
+            seat.setSeatNumber(i);
+            seat.setFlight_id(flight.getId());
+            seatIds.add(seatService.save(seat).getId());
+        }
+        return seatIds;
+    }
+
     @Test
     public void purchaseSeat_ConcurrentRequests() throws InterruptedException {
         ObjectMapper mapper = new ObjectMapper();
 
-        FlightDTO flight1 = new FlightDTO();
-        flight1.setName("Test Flight");
-        flight1.setDescription("Test");
-        flight1.setPrice(new BigDecimal("100"));
-
-        flight1 = flightService.save(flight1);
-
-
-        SeatDTO seat = new SeatDTO();
-        seat.setSeatNumber(1);
-        seat.setFlight_id(flight1.getId());
-        seatService.save(seat);
-        flightService.findByIdDTO(flight1.getId());
+        Long seatId = createSeats(1).get(0);
 
 
         // Create and start the first thread
@@ -69,7 +75,7 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
             @Override
             public void run() {
                 try {
-                    kafkaTemplate.send("seat-topic",mapper.writeValueAsString(new SelectSeatRequest(1L,"buyer1")));
+                    kafkaTemplate.send("seat-topic",mapper.writeValueAsString(new SelectSeatRequest(seatId,"buyer1")));
                     Thread.sleep(5000);
                     if (kafkaListeners.isExceptionOccurred()){
                         throw new SeatNotAvailableException(kafkaListeners.getExceptionMessage());
@@ -86,7 +92,7 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
             @Override
             public void run() {
                 try {
-                    kafkaTemplate.send("seat-topic",mapper.writeValueAsString(new SelectSeatRequest(1L,"buyer2")));
+                    kafkaTemplate.send("seat-topic",mapper.writeValueAsString(new SelectSeatRequest(seatId,"buyer2")));
                     Thread.sleep(5000);
                     if (kafkaListeners.isExceptionOccurred()){
                         throw new SeatNotAvailableException(kafkaListeners.getExceptionMessage());
@@ -104,8 +110,8 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
 
     @Test
     public void makePayment_ValidPaymentRequest_SuccessfulPayment(){
-        seatService.selectSeat(1L,"moboz7");
-        seatService.selectSeat(2L,"moboz7");
+        List<Long> s = createSeats(2);
+        s.forEach(seatId -> seatService.selectSeat(seatId,"moboz7"));
         PaymentRequest paymentRequest = new PaymentRequest();
         SampleAdress sampleAdress = new SampleAdress();
         SampleBuyer sampleBuyer = new SampleBuyer();
@@ -117,9 +123,6 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
         paymentRequest.setAddress(sampleAdress.getSampleAddress());
         paymentRequest.setBuyer(buyer);
         paymentRequest.setBaskedId("B123");
-        List<Long> s = new ArrayList<>();
-        s.add(1L);
-        s.add(2L);
         paymentRequest.setSeat_ids(s);
 
 
@@ -128,8 +131,8 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
 
     @Test(expected = SeatNotAvailableException.class)
     public void makePayment_SeatNotAvailable_ThrowsSeatNotAvailableException(){
-        seatService.selectSeat(1L,"moboz7");
-        seatService.selectSeat(2L,"moboz7");
+        List<Long> s = createSeats(2);
+        s.forEach(seatId -> seatService.selectSeat(seatId,"moboz7"));
         PaymentRequest paymentRequest = new PaymentRequest();
         SampleAdress sampleAdress = new SampleAdress();
         SampleBuyer sampleBuyer = new SampleBuyer();
@@ -141,9 +144,6 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
         paymentRequest.setAddress(sampleAdress.getSampleAddress());
         paymentRequest.setBuyer(buyer);
         paymentRequest.setBaskedId("B123");
-        List<Long> s = new ArrayList<>();
-        s.add(1L);
-        s.add(2L);
         paymentRequest.setSeat_ids(s);
 
 
@@ -152,8 +152,8 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
 
     @Test(expected = PaymentNotAcceptedException.class)
     public void makePayment_PaymentFailure_ThrowsPaymentNotAcceptedException(){
-        seatService.selectSeat(1L,"moboz7");
-        seatService.selectSeat(2L,"moboz7");
+        List<Long> s = createSeats(2);
+        s.forEach(seatId -> seatService.selectSeat(seatId,"moboz7"));
         PaymentRequest paymentRequest = new PaymentRequest();
         SampleAdress sampleAdress = new SampleAdress();
         SampleBuyer sampleBuyer = new SampleBuyer();
@@ -167,9 +167,6 @@ public class IyzipayPaymentServiceTest { //paymentService and concurrent book re
         buyer.setCity(""); //missing parameter
         paymentRequest.setBuyer(buyer);
         paymentRequest.setBaskedId("B123");
-        List<Long> s = new ArrayList<>();
-        s.add(1L);
-        s.add(2L);
         paymentRequest.setSeat_ids(s);
 
 
