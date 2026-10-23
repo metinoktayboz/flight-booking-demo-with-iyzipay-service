@@ -11,6 +11,7 @@ import com.iyzipay.demo.repository.SeatRepository;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -99,7 +100,7 @@ public class SeatServiceTest { //SeatService tests with mock data. Each test sho
         Mockito.verify(seatRepository).deleteById(id);
     }
 
-    @Test(expected = java.lang.NullPointerException.class) //because of the return of save method, but console show that working
+    @Test
     public void testSelectSeat_AvailableSeat() throws Exception {
         // Prepare test data
         Long selectedSeatId = 1L;
@@ -111,13 +112,19 @@ public class SeatServiceTest { //SeatService tests with mock data. Each test sho
         seat.setAvailability(true);
         seat.setFlight(flight);
 
-        SeatDTO selectedSeat = new SeatDTO();
-        selectedSeat.setId(selectedSeatId);
-        selectedSeat.setAvailability(true);
-
-        // Set up mock behavior
+        // Set up mock behavior: the converters copy the fields like the real ones, the repository returns what it saves
         Mockito.when(seatRepository.findById(selectedSeatId)).thenReturn(Optional.of(seat));
-        Mockito.when(seatEntityToDto.convert(seat)).thenReturn(selectedSeat);
+        Mockito.when(seatEntityToDto.convert(Mockito.any(Seat.class))).thenAnswer(invocation -> {
+            Seat s = invocation.getArgument(0);
+            return new SeatDTO(s.getId(), s.isAvailability(), s.getSeatNumber(), s.getPassengerId(), s.getFlight().getId());
+        });
+        Mockito.when(seatDtoToEntity.convert(Mockito.any(SeatDTO.class))).thenAnswer(invocation -> {
+            SeatDTO dto = invocation.getArgument(0);
+            Seat s = new Seat(dto.isAvailability(), dto.getSeatNumber(), dto.getPassengerId(), flight);
+            s.setId(dto.getId());
+            return s;
+        });
+        Mockito.when(seatRepository.save(Mockito.any(Seat.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // Call the method to test
         SeatDTO result = seatService.selectSeat(selectedSeatId, buyerId);
@@ -125,8 +132,14 @@ public class SeatServiceTest { //SeatService tests with mock data. Each test sho
         // Verify the result
         Assert.assertFalse(result.isAvailability());
         Assert.assertEquals(buyerId, result.getPassengerId());
-        Mockito.verify(seatService).findById(selectedSeatId);
-        Mockito.verify(seatService).save(Mockito.any(SeatDTO.class));
+
+        ArgumentCaptor<Seat> savedSeat = ArgumentCaptor.forClass(Seat.class);
+        Mockito.verify(seatRepository).findById(selectedSeatId);
+        Mockito.verify(seatRepository).save(savedSeat.capture());
+        Assert.assertEquals(selectedSeatId, savedSeat.getValue().getId());
+        Assert.assertFalse(savedSeat.getValue().isAvailability());
+        Assert.assertEquals(buyerId, savedSeat.getValue().getPassengerId());
+        Mockito.verify(flightService).updateAvailableSeat(flight.getId());
     }
 
     @Test(expected = SeatNotAvailableException.class)
