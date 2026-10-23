@@ -59,14 +59,12 @@ public class SeatService {
     public SeatDTO selectSeat(Long selectedSeat_id, String buyer_id) throws SeatNotAvailableException {
             SeatDTO selectedSeat = findById(selectedSeat_id); /* Getting seat details from database again to check availability */
             if (!selectedSeat.isAvailability()) {             /* in case of someone took the seat in booking time */
-                System.out.println("Seat:" + selectedSeat_id + " is not available for " + buyer_id + "!");
                 logger.error("Seat: "+ selectedSeat_id +" is booked by someone else!");
                 throw new SeatNotAvailableException("Seat: "+ selectedSeat_id +" is booked by someone else!");
             }
 
             selectedSeat.setAvailability(false);
             selectedSeat.setPassengerId(buyer_id); /* Closing the seat for buyer */
-            System.out.println("Seat:" + selectedSeat_id + " is booked for " + buyer_id + "!");
             logger.info("Seat: "+ selectedSeat_id +" is booked by " + buyer_id + "!");
             return save(selectedSeat);
     }
@@ -78,7 +76,7 @@ public class SeatService {
             seat.setPassengerId(null);
             save(seat);
         });
-        System.out.println("Seats are unselected now!");
+        logger.info("Seats are unselected now!");
     }
 
     public void isFlightValid(Long flight_id){
