@@ -4,6 +4,9 @@ spring:
     driverClassName: org.h2.Driver
     username: root
     password: pass
+  kafka:
+    listener:
+      concurrency: 1
   jpa:
     show-sql: false
     spring.jpa.database-platform: org.hibernate.dialect.H2Dialect

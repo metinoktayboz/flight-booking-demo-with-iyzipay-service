@@ -8,6 +8,8 @@ spring:
     password: pass
   kafka:
     bootstrap-servers: localhost:9092
+    listener:
+      concurrency: 1
   jpa:
     show-sql: true
     open-in-view: false
