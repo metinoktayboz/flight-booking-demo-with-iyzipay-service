@@ -1,1 +1,0 @@
-INSERT INTO payment VALUES (1, 10.0);

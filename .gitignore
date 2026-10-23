@@ -1,0 +1,9 @@
+# Maven
+target/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# H2 database files
+data/
