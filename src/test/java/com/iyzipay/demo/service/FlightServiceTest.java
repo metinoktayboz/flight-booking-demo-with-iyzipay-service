@@ -108,7 +108,7 @@ public class FlightServiceTest { //FlightService tests with mock data. Each test
         Mockito.verify(flightRepository).deleteById(id);
     }
 
-    @Test(expected = ResourceNotFoundException.class)
+    @Test
     public void testDelete_Failure() {
         // Prepare test data
         Long id = 1L;
@@ -116,11 +116,14 @@ public class FlightServiceTest { //FlightService tests with mock data. Each test
         // Set up mock behavior
         Mockito.doThrow(ResourceNotFoundException.class).when(flightRepository).deleteById(id);
 
-        // Call the method to test
-        flightService.delete(id);
-
-        // Verify the behavior
-        Mockito.verify(flightRepository).deleteById(id);
+        // Call the method to test, the repository's exception should reach the caller
+        try {
+            flightService.delete(id);
+            Assert.fail("Expected ResourceNotFoundException");
+        } catch (ResourceNotFoundException e) {
+            // Verify the behavior
+            Mockito.verify(flightRepository).deleteById(id);
+        }
     }
 
     @Test

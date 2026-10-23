@@ -142,7 +142,7 @@ public class SeatServiceTest { //SeatService tests with mock data. Each test sho
         Mockito.verify(flightService).updateAvailableSeat(flight.getId());
     }
 
-    @Test(expected = SeatNotAvailableException.class)
+    @Test
     public void testSelectSeat_UnavailableSeat() throws Exception {
         // Prepare test data
         Long selectedSeatId = 1L;
@@ -163,7 +163,13 @@ public class SeatServiceTest { //SeatService tests with mock data. Each test sho
         Mockito.when(seatEntityToDto.convert(seat)).thenReturn(selectedSeat);
 
         // Call the method to test
-        seatService.selectSeat(selectedSeatId, buyerId);
+        try {
+            seatService.selectSeat(selectedSeatId, buyerId);
+            Assert.fail("Expected SeatNotAvailableException");
+        } catch (SeatNotAvailableException e) {
+            // The seat is not saved for the new buyer
+            Mockito.verify(seatRepository, Mockito.never()).save(Mockito.any(Seat.class));
+        }
     }
 
     @Test
@@ -230,17 +236,21 @@ public class SeatServiceTest { //SeatService tests with mock data. Each test sho
         // No exception should be thrown
     }
 
-    @Test(expected = ResourceNotFoundException.class)
+    @Test
     public void testIsFlightValid_NonExistingFlight() {
         // Mock the behavior of flightService.findById to throw a ResourceNotFoundException
         Long flightId = 1L;
         Mockito.when(flightService.findById(flightId)).thenThrow(new ResourceNotFoundException("Flight: " + flightId + "does not exist."));
 
-        // Call the method to test
-        seatService.isFlightValid(flightId);
+        // Call the method to test, a ResourceNotFoundException with the service's own message should be thrown
+        try {
+            seatService.isFlightValid(flightId);
+            Assert.fail("Expected ResourceNotFoundException");
+        } catch (ResourceNotFoundException e) {
+            Assert.assertEquals("Seat can not be added because flight: " + flightId + " does not exist!", e.getMessage());
+        }
 
         // Verify that flightService.findById was called with the correct argument
         Mockito.verify(flightService).findById(flightId);
-        // ResourceNotFoundException should be thrown
     }
 }
